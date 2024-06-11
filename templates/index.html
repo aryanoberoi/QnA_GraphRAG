@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Documents or URLs</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css" integrity="sha384-B4dIYHKNBt8Bc12p+WXckhzcICo0wtJAoU8YZTY5qE0Id1GSseTk6S+L3BlXeVIU" crossorigin="anonymous">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='chat.css')}}"/>
+    <style>
+        /* General body styling */
+        body {
+            background-color: #333;
+            color: #fff;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        /* Header styling */
+        header {
+            background-color: #222;
+            color: #fff;
+            padding: 10px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .company-icon {
+            margin-right: 5px;
+        }
+        .app-name {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        /* Styling for the form */
+        form {
+            background-color: #444;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            margin: 20px auto;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        label {
+            font-weight: 700;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        input[type="file"],
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border: none;
+            background-color: #555;
+            color: white;
+        }
+
+        input[type="file"]::file-selector-button,
+        button {
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: none;
+            background-color: #666;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="file"]::file-selector-button:hover,
+        button:hover {
+            background-color: #777;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            form {
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="static/cr.jpg" alt="Company Icon" class="company-icon">
+        <h1 class="app-name">Chat with Documents or URL</h1>
+    </header>
+
+    <form method="post" enctype="multipart/form-data">
+        <label for="files">Upload your PDF, DOC, DOCX, or TXT Files:</label>
+        <input type="file" id="files" name="files" multiple>
+        <div id="fileList"></div>
+        <label for="url_input">Or enter a URL to process:</label>
+        <input type="text" id="url_input" name="url_input">
+        <label for="input_language">Select Input Language:</label>
+        <select id="input_language" name="input_language">
+            <option value="1">Hindi</option>
+            <option value="2">Gom</option>
+            <option value="3">Kannada</option>
+            <option value="4">Dogri</option>
+            <option value="5">Bodo</option>
+            <option value="6">Urdu</option>
+            <option value="7">Tamil</option>
+            <option value="8">Kashmiri</option>
+            <option value="9">Assamese</option>
+            <option value="10">Bengali</option>
+            <option value="11">Marathi</option>
+            <option value="12">Sindhi</option>
+            <option value="13">Maithili</option>
+            <option value="14">Punjabi</option>
+            <option value="15">Malayalam</option>
+            <option value="16">Manipuri</option>
+            <option value="17">Telugu</option>
+            <option value="18">Sanskrit</option>
+            <option value="19">Nepali</option>
+            <option value="20">Santali</option>
+            <option value="21">Gujarati</option>
+            <option value="22">Odia</option>
+            <option value="23">English</option>
+        </select>
+
+        <label for="output_language">Select Output Language:</label>
+        <select id="output_language" name="output_language">
+            <option value="1">Hindi</option>
+            <option value="2">Gom</option>
+            <option value="3">Kannada</option>
+            <option value="4">Dogri</option>
+            <option value="5">Bodo</option>
+            <option value="6">Urdu</option>
+            <option value="7">Tamil</option>
+            <option value="8">Kashmiri</option>
+            <option value="9">Assamese</option>
+            <option value="10">Bengali</option>
+            <option value="11">Marathi</option>
+            <option value="12">Sindhi</option>
+            <option value="13">Maithili</option>
+            <option value="14">Punjabi</option>
+            <option value="15">Malayalam</option>
+            <option value="16">Manipuri</option>
+            <option value="17">Telugu</option>
+            <option value="18">Sanskrit</option>
+            <option value="19">Nepali</option>
+            <option value="20">Santali</option>
+            <option value="21">Gujarati</option>
+            <option value="22">Odia</option>
+            <option value="23">English</option>
+        </select>
+        <button type="submit" style="background-color: #555; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px;">Submit & Process</button>
+    </form>
+    <div style="background-color: #333; padding: 10px; border-radius: 8px; color: white; font-family: Arial, sans-serif;">
+        <center>
+        <!-- Display the message here -->
+        {% if message %}
+        <div style="color: rgb(255, 255, 255); margin-top: 20px;">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        <!-- Display file details -->
+        <div style="background-color: #222; padding: 10px; border-radius: 8px;">
+            <ul>
+                {% for file in file_details %}
+                    <li>{{ file.name }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        </center>
+    </div>
+</center>
+<div class="container-fluid h-100">
+			<div class="row justify-content-center h-100">		
+				<div class="col-md-8 col-xl-6 chat">
+					<div class="card">
+						<div class="card-header msg_head">
+							<div class="d-flex bd-highlight">
+						   
+							</div>
+						</div>
+						<div id="messageFormeight" class="card-body msg_card_body">
+							
+							
+						</div>
+						<div class="card-footer">
+							<form id="messageArea" class="input-group">
+                                <input type="text" id="text" name="msg" placeholder="Type your message..." autocomplete="off" class="form-control type_msg" required/>
+								<div class="input-group-append">
+                                    <button type="submit" id="send" class="input-group-text send_btn"><i class="fas fa-location-arrow"></i></button>
+                                    <button type="button" id="record" class="input-group-text record_btn"><i class="fas fa-microphone"></i></button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+    <script>
+        const fileInput = document.getElementById('files');
+        fileInput.addEventListener('change', handleFileUpload);
+
+        function handleFileUpload(event) {
+            const fileList = event.target.files;
+            const fileListContainer = document.getElementById('fileList');
+            fileListContainer.innerHTML = '';
+
+            for (let i = 0; i < fileList.length; i++) {
+                const file = fileList[i];
+                const fileInfo = document.createElement('p');
+                fileInfo.textContent = `File Name: ${file.name}, File Size: ${file.size} bytes`;
+                fileListContainer.appendChild(fileInfo);
+            }
+        }
+    </script>
+
+    <script>
+        document.getElementById('files').addEventListener('change', function() {
+            const fileInfo = document.getElementById('fileInfo');
+            const files = this.files;
+            if (files.length > 0) {
+                fileInfo.textContent = `File: ${files[0].name}`;
+                fileInfo.style.display = 'block';
+            } else {
+                fileInfo.textContent = '';
+                fileInfo.style.display = 'none';
+            }
+        });
+
+        $(document).ready(function() {
+    $("#messageArea").on("submit", function(event) {
+        event.preventDefault(); // Prevent the default form submission
+        var rawText = $("#text").val();
+
+        var userHtml = '<div class="d-flex justify-content-end mb-4"><div class="msg_cotainer_send">' + rawText + '<span class="msg_time_send">' + '</span><button class="play_btn"><i class="fas fa-play"></i></button></div><div class="img_cont_msg"><img src="https://i.ibb.co/d5b84Xw/Untitled-design.png" class="rounded-circle user_img_msg"></div></div>';
+        
+        $("#text").val("");
+        $("#messageFormeight").append(userHtml);
+        scrollToBottom();
+
+        $.ajax({
+            method: "POST",
+            url: "/ask",
+            contentType: "application/json",
+            data: JSON.stringify({ question: rawText }),
+            success: function(data) {
+                if (data.answer) {
+                    var botHtml = '<div class="d-flex justify-content-start mb-4"><div class="img_cont_msg"><img src="' + "{{ url_for('static', filename='cr.jpg')}}" + '" class="rounded-circle user_img_msg"></div><div class="msg_cotainer">' + data.answer + '<span class="msg_time">' + '</span><button class="play_btn"><i class="fas fa-play"></i></button></div></div>';
+                    $("#messageFormeight").append($.parseHTML(botHtml));
+                    scrollToBottom();
+                } else if (data.error) {
+                    console.error("Error from server: " + data.error);
+                }
+            },
+            error: function() {
+                console.error("Error fetching response from /ask endpoint.");
+            }
+        });
+    });
+
+    function scrollToBottom() {
+        $('.msg_card_body').scrollTop($('.msg_card_body')[0].scrollHeight);
+    }
+
+    const recordButton = document.getElementById('record');
+    const textInput = document.getElementById('text');
+    let isRecording = false;
+    let recognition;
+
+    if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = function() {
+            isRecording = true;
+            recordButton.innerHTML = '<i class="fas fa-stop"></i>';
+        };
+
+        recognition.onresult = function(event) {
+            const transcript = event.results[0][0].transcript;
+            textInput.value = transcript;
+        };
+
+        recognition.onerror = function(event) {
+            console.error("Speech recognition error", event);
+        };
+
+        recognition.onend = function() {
+            if (isRecording) {
+                recognition.start(); // Restart recognition to keep it running
+            } else {
+                recordButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            }
+        };
+    } else {
+        console.warn("Speech recognition not supported in this browser.");
+        recordButton.disabled = true;
+    }
+
+    recordButton.addEventListener('click', function() {
+        if (isRecording) {
+            isRecording = false;
+            recognition.stop();
+        } else {
+            isRecording = true;
+            recognition.start();
+        }
+    });
+
+    // Text-to-Speech functionality
+    $(document).on('click', '.play_btn', function() {
+        const message = $(this).closest('.msg_cotainer_send, .msg_cotainer').text();
+        const utterance = new SpeechSynthesisUtterance(message);
+        speechSynthesis.speak(utterance);
+    });
+});
+
+    </script>
+</body>
+</html>
