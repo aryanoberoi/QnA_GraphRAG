@@ -252,9 +252,9 @@ def ask():
     user_query = request.json.get("question")
     if user_query and user_query.strip():
         session['chat_history'].append(HumanMessage(content=user_query))
-        response = user_input(user_query, session['session_id'])  # Call user_input function
+        response = user_input(user_query)  # Call user_input function
 
-        res = response["output_text"]
+        res = response
         session['chat_history'].append(AIMessage(content=res))
         print(request.form.get("input_language"))
         
