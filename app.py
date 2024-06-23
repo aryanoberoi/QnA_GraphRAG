@@ -1,16 +1,16 @@
+# Required imports
 from flask import Flask, request, jsonify, render_template, session
 from flask_session import Session
 import asyncio
 from PyPDF2 import PdfReader
 from docx import Document
 import docx2txt
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
 import os
 import json
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 import google.generativeai as genai
 from langchain.vectorstores.faiss import FAISS
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
@@ -19,65 +19,29 @@ from langchain_core.output_parsers import StrOutputParser
 import requests
 from bs4 import BeautifulSoup
 from werkzeug.utils import secure_filename
-import pandas as pd
-import spacy
-import requests
-from bs4 import BeautifulSoup
-import PyPDF2
 from neo4j import GraphDatabase
-from langchain_core.runnables import (
-    RunnableBranch,
-    RunnableLambda,
-    RunnableParallel,
-    RunnablePassthrough,
-)
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
 from langchain.graphs import Neo4jGraph
-from langchain_core.prompts.prompt import PromptTemplate
-from langchain_core.pydantic_v1 import BaseModel, Field
-from typing import Tuple, List, Optional
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.output_parsers import StrOutputParser
-import os
-from langchain_community.graphs import Neo4jGraph  # Added import
-from langchain_community.llms import Ollama  # Added import
-from langchain.text_splitter import TokenTextSplitter  # Added import
-from langchain_experimental.graph_transformers import LLMGraphTransformer  # Added import
-from neo4j import GraphDatabase
-from langchain_community.vectorstores import Neo4jVector  # Added import
-
-from langchain_community.vectorstores.neo4j_vector import remove_lucene_chars
-from langchain_core.runnables import ConfigurableField, RunnableParallel, RunnablePassthrough
-from langchain.docstore.document import Document 
-'''part of the LangChain library and is used to represent a piece of text or document data along with its metadata. 
-It is a common data structure used throughout the LangChain library for storing and processing text data.
-In your code, you are using the Document class to create new Document objects from the preprocessed text data. 
-Specifically, you are creating a dictionary with the page_content (the actual text content) and metadata (additional information about the text, such as the source), 
-and then creating a Document object using that dictionary.'''
-from langchain.embeddings import SentenceTransformerEmbeddings
-from langchain.embeddings import HuggingFaceEmbeddings
-from py2neo import Graph
+from langchain.docstore.document import Document
 from langchain_community.vectorstores import Neo4jVector
-from langchain.embeddings import OpenAIEmbeddings
-import os
 from langchain_experimental.llms.ollama_functions import OllamaFunctions
 from langchain_community.llms import Ollama
-from langchain_community.chat_models import ChatOllama  # Added import
-from langchain.prompts import PromptTemplate
-from langchain.output_parsers import StructuredOutputParser
-from pydantic import BaseModel
-from typing import List
-from langchain.chains import RetrievalQA  # Added import
+from langchain_community.chat_models import ChatOllama
+from langchain.chains import RetrievalQA
 from langchain_community.embeddings import OllamaEmbeddings
+from langchain_experimental.graph_transformers import LLMGraphTransformer
 
+# Flask app initialization
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
 app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
-URI = "bolt://localhost:7687"
-graph = Neo4jGraph(url=URI, username="neo4j", password="password")  # Initialized Neo4j Graph
 
-# Ensure the environment variables are loaded
+# Neo4j connection
+URI = "bolt://localhost:7687"
+graph = Neo4jGraph(url=URI, username="neo4j", password="password")
+
+# Load environment variables
 load_dotenv()
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
@@ -90,14 +54,15 @@ def get_or_create_eventloop():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             return asyncio.get_event_loop()
+
 get_or_create_eventloop()
 
+# Functions to extract text from different file types
 def get_text_from_doc(doc_file):
     document = Document(doc_file)
     return "\n".join([paragraph.text for paragraph in document.paragraphs])
 
 def get_text_from_docx(docx_file):
-    # Save the uploaded file to a temporary location to be processed by docx2txt
     temp_file_path = "temp.docx"
     with open(temp_file_path, "wb") as f:
         f.write(docx_file.read())
@@ -113,6 +78,7 @@ def get_text_from_pdf(pdf_file):
         text += page.extract_text()
     return text
 
+# Function to extract text from multiple files
 def get_text_from_files(files):
     text = ""
     for file in files:
@@ -128,6 +94,7 @@ def get_text_from_files(files):
             return f"Unsupported file type: {file.filename}"
     return text
 
+# Function to extract text from a URL
 def get_text_from_url(url):
     try:
         response = requests.get(url)
@@ -137,19 +104,14 @@ def get_text_from_url(url):
     except Exception as e:
         return f"Error fetching the URL: {e}"
 
+# Function to split text into chunks
 def get_text_chunks(text):
     text_splitter = TokenTextSplitter(chunk_size=512, chunk_overlap=24)
-    basic = text_splitter.split_text(str(text[:3]))  # Splitting text into chunks
+    return text_splitter.split_text(str(text[:3]))
 
-  
-    return basic
-
-# Added get_vector_store function
+# Function to create and store vector representations of text chunks
 def get_vector_store(text_chunks, usersession):
-    # Preprocess the documents to convert lists to tuples
     text_chunks = get_text_chunks(text_chunks)
-
-    # Create Document objects from the text chunks
     documents = [Document(page_content=chunk) for chunk in text_chunks]
 
     llm = OllamaFunctions(model="llama3")
@@ -162,7 +124,7 @@ def get_vector_store(text_chunks, usersession):
         include_source=True
     )
 
-# Added get_conversational_chain function
+# Function to set up the conversational chain
 def get_conversational_chain():
     embeddings = OllamaEmbeddings(model="mxbai-embed-large")
     vector_index = Neo4jVector.from_existing_graph(
@@ -189,7 +151,7 @@ def get_conversational_chain():
     )
     return vector_qa
 
-# Added user_input function
+# Function to process user input and generate a response
 def user_input(user_question):
     vector_qa = get_conversational_chain()
     if vector_qa is None:
@@ -197,11 +159,12 @@ def user_input(user_question):
     response = vector_qa.run(user_question)
     return response
 
+# Route for the main page
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    message = None  # Initialize a message variable
-    file_details = []  # Initialize a list to store file details
-    url_displayed = session.get('url_input', '')  # Retrieve the stored URL or set it to empty string
+    message = None
+    file_details = []
+    url_displayed = session.get('url_input', '')
 
     if 'session_id' not in session:
         session['session_id'] = os.urandom(24).hex()
@@ -214,62 +177,57 @@ def index():
         url_input = request.form.get("url_input")
         raw_text = ""
         session["input_language"] = int(request.form.get("input_language"))
-        
         session["output_language"] = int(request.form.get("output_language"))
-        # Process files
+        
+        # Process uploaded files
         if files and files[0].filename != '':
             valid_files = all(f.filename.endswith(('.pdf', '.doc', '.docx', '.txt')) for f in files)
             if valid_files:
                 raw_text += get_text_from_files(files)
                 message = "Files successfully uploaded."
-
-                # Get file details for display
                 for file in files:
                     file_details.append({"name": file.filename})
             else:
                 message = "Please upload files in PDF, DOC, DOCX, or TXT format."
 
-        # Process URL
+        # Process URL input
         if url_input:
             url_text = get_text_from_url(url_input)
-            raw_text += " " + url_text  # Concatenate URL text with existing text
-             # Debug print to check what is being added
-            message = "Files and URL processed successfully. URL : "+ url_input
-
-            session['url_input'] = url_input  # Store the URL in the session
-
+            raw_text += " " + url_text
+            message = f"Files and URL processed successfully. URL: {url_input}"
+            session['url_input'] = url_input
 
         if raw_text:
             text_chunks = get_text_chunks(raw_text)
-            get_vector_store(text_chunks, session['session_id'])  # Call get_vector_store function
+            get_vector_store(text_chunks, session['session_id'])
 
     chat_history = session.get('chat_history', [])
     return render_template('index.html', chat_history=chat_history, message=message, file_details=file_details, url_displayed=url_displayed)
 
-
+# Route for handling user questions
 @app.route('/ask', methods=['POST'])
 def ask():
     user_query = request.json.get("question")
     if user_query and user_query.strip():
         session['chat_history'].append(HumanMessage(content=user_query))
-        response = user_input(user_query)  # Call user_input function
+        response = user_input(user_query)
 
         res = response
         session['chat_history'].append(AIMessage(content=res))
-        print(request.form.get("input_language"))
-        
 
+        # Translate the response if needed
         if int(session["output_language"]) != 23:
             payload = {
-        "source_language": session["input_language"],
-        "content": res,
-        "target_language": session["output_language"]
-      }
+                "source_language": session["input_language"],
+                "content": res,
+                "target_language": session["output_language"]
+            }
             res = json.loads(requests.post('http://127.0.0.1:8000/scaler/translate', json=payload).content)
             res = res['translated_content']
 
         return jsonify({"answer": res, "url": session.get('url_input', '')})
     return jsonify({"error": "Invalid input"})
 
+# Run the Flask app
 if __name__ == "__main__":
     app.run(debug=True)
