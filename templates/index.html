@@ -202,7 +202,18 @@
 				</div>
 			</div>
 		</div>
-
+        <button id="loadGraphBtn">Load Graph</button>
+        <div id="graphContainer"></div>
+        <script>
+            document.getElementById('loadGraphBtn').addEventListener('click', function() {
+    fetch('./graph.html')
+       .then(response => response.text())
+       .then(data => {
+            document.getElementById('graphContainer').innerHTML = data;
+        })
+       .catch(error => console.error('Error loading graph.html:', error));
+});
+        </script>
     <script>
         const fileInput = document.getElementById('files');
         fileInput.addEventListener('change', handleFileUpload);

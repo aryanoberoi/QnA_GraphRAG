@@ -1,20 +1,13 @@
 from flask import Flask, request, jsonify, render_template, session
 from flask_session import Session
-from flask_cors import CORS
 import asyncio
 from PyPDF2 import PdfReader
 from docx import Document
 import docx2txt
-from openai import OpenAI
-from pathlib import Path
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import CharacterTextSplitter
 import os
-import base64
 import json
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-import google.generativeai as genai
 from langchain.vectorstores.faiss import FAISS
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
@@ -22,22 +15,71 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 import requests
 from bs4 import BeautifulSoup
-from langchain_experimental.graph_transformers import LLMGraphTransformer
-import logging
-from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
+import pandas as pd
+import spacy
+import requests
+from bs4 import BeautifulSoup
+import PyPDF2
+from neo4j import GraphDatabase
+from langchain_core.runnables import (
+    RunnableBranch,
+    RunnableLambda,
+    RunnableParallel,
+    RunnablePassthrough)
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts.prompt import PromptTemplate
+from langchain_core.pydantic_v1 import BaseModel, Field
+from typing import Tuple, List, Optional
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.output_parsers import StrOutputParser
 import os
+from langchain_community.graphs import Neo4jGraph  # Added import
+from langchain_community.llms import Ollama  # Added import
+from langchain.text_splitter import TokenTextSplitter  # Added import
+from langchain_experimental.graph_transformers import LLMGraphTransformer  # Added import
+from neo4j import GraphDatabase
+from langchain_community.vectorstores import Neo4jVector  # Added import
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
-
+from langchain_community.vectorstores.neo4j_vector import remove_lucene_chars
+from langchain_core.runnables import ConfigurableField, RunnableParallel, RunnablePassthrough
+from langchain.docstore.document import Document 
+'''part of the LangChain library and is used to represent a piece of text or document data along with its metadata. 
+It is a common data structure used throughout the LangChain library for storing and processing text data.
+In your code, you are using the Document class to create new Document objects from the preprocessed text data. 
+Specifically, you are creating a dictionary with the page_content (the actual text content) and metadata (additional information about the text, such as the source), 
+and then creating a Document object using that dictionary.'''
+from langchain.embeddings import SentenceTransformerEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
+from py2neo import Graph
+from langchain_community.vectorstores import Neo4jVector
+from langchain.embeddings import OpenAIEmbeddings
+import os
+from langchain_experimental.llms.ollama_functions import OllamaFunctions
+from langchain_community.llms import Ollama
+from langchain_community.chat_models import ChatOllama  # Added import
+from langchain.prompts import PromptTemplate
+from langchain.output_parsers import StructuredOutputParser
+from pydantic import BaseModel
+from typing import List
+from langchain.chains import RetrievalQA  # Added import
+from langchain_community.embeddings import OllamaEmbeddings
+from tempfile import NamedTemporaryFile
+from langchain_openai import ChatOpenAI
+from langchain_community.document_loaders import UnstructuredURLLoader
+import logging
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
 app.secret_key = 'supersecretkey'
 app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
+from openai import OpenAI
+URI = "neo4j+s://0479a26a.databases.neo4j.io"
+from pyvis.network import Network
+graph = Neo4jGraph(url=URI, username="neo4j", password="OZcxm3oDjT8I0WRxC2RgkqAudZOnZ174ciaDk2gQuSM")  # Initialized Neo4j Graph
 
-
-
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# Ensure the environment variables are loaded
+load_dotenv()
+docs=[]
 # Function to handle asyncio event loop
 def get_or_create_eventloop():
     try:
@@ -50,86 +92,163 @@ def get_or_create_eventloop():
 get_or_create_eventloop()
 
 def get_text_from_doc(doc_file):
-    document = Document(doc_file)
-    return "\n".join([paragraph.text for paragraph in document.paragraphs])
+    temp_dir = "temp"
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_file_path = os.path.join(temp_dir, secure_filename(doc_file.filename))
+    
+    try:
+        doc_file.save(temp_file_path)
+        from langchain_community.document_loaders import Docx2txtLoader
 
-def get_text_from_docx(docx_file):
-    # Save the uploaded file to a temporary location to be processed by docx2txt
-    temp_file_path = "temp.docx"
-    with open(temp_file_path, "wb") as f:
-        f.write(docx_file.read())
-    return docx2txt.process(temp_file_path)
+        loader = Docx2txtLoader(temp_file_path)
+        data = loader.load()
+        print(data)
+        return data
+    finally:
+        os.remove(temp_file_path)
 
-def get_text_from_txt(txt_file):
-    return txt_file.read().decode("utf-8")
+def get_text_from_txt(doc_file):
+    temp_dir = "temp"
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_file_path = os.path.join(temp_dir, secure_filename(doc_file.filename))
+    
+    try:
+        doc_file.save(temp_file_path)
+        from langchain_community.document_loaders.text import TextLoader
 
+        loader = TextLoader(temp_file_path)
+        data = loader.load()
+        print(data)
+        return data
+    finally:
+        os.remove(temp_file_path)
 def get_text_from_pdf(pdf_file):
-    text = ""
-    pdf_reader = PdfReader(pdf_file)
-    for page in pdf_reader.pages:
-        text += page.extract_text()
-    return text
+    temp_dir = "temp"
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_file_path = os.path.join(temp_dir, secure_filename(pdf_file.filename))
+    pdf_file.save(temp_file_path)
+    from langchain_community.document_loaders import PyPDFLoader
+
+
+    loader = PyPDFLoader(temp_file_path)
+
+    data = loader.load()
+    print(data)
+    return data
 
 def get_text_from_files(files):
-    text = ""
     for file in files:
         if file.filename.endswith(".pdf"):
-            text += get_text_from_pdf(file)
+            docs.extend(get_text_from_pdf(file))
         elif file.filename.endswith(".doc"):
-            text += get_text_from_doc(file)
+            docs.extend(get_text_from_doc(file))
         elif file.filename.endswith(".docx"):
-            text += get_text_from_docx(file)
+            docs.extend(get_text_from_doc(file))
         elif file.filename.endswith(".txt"):
-            text += get_text_from_txt(file)
+            docs.extend(get_text_from_txt(file))
         else:
             return f"Unsupported file type: {file.filename}"
-    return text
+    return docs
 
-def get_text_from_urls(urls):
-    texts = []
-    for url in urls:
-        try:
-            response = requests.get(url)
-            soup = BeautifulSoup(response.content, "html.parser")
-            text = ' '.join(p.get_text() for p in soup.find_all('p'))
-            texts.append(text)
-        except Exception as e:
-            texts.append(f"Error fetching the URL: {e}")
-    return texts
+
+
+def get_text_from_url(urls):
+   loader = UnstructuredURLLoader(urls=urls)
+   return loader.load()
 
 def get_text_chunks(text):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
-    chunks = text_splitter.split_text(text)
-    return chunks
-# take foldername input
+    text_splitter = CharacterTextSplitter(separator="\n\n")
+    basic = text_splitter.split_documents(text)  # Splitting text into chunks
+
+  
+    return basic
+
+def get_graph(graph_documents):
+        net = Network(height="800px", width="100%", bgcolor="#222222", font_color="white")
+        
+        nodes = graph_documents[0].nodes
+        relationships = graph_documents[0].relationships
+        
+        for node in nodes:
+            net.add_node(node.id, label=node.id, title=str(node.type), color="skyblue")
+        
+        for relationship in relationships:
+            net.add_edge(relationship.source.id, relationship.target.id, title=relationship.type, color="gray", arrows="to")
+        
+        net.repulsion()
+        
+        # Generate HTML file
+        net.write_html("graph.html")
+
+
+
+# Added get_vector_store function
 def get_vector_store(text_chunks, usersession):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-    vector_store.save_local(usersession)
+    # Preprocess the documents to convert lists to tuples
+    text_chunks = get_text_chunks(text_chunks)
 
-def get_conversational_chain():
-    prompt_template = """
-    Answer the question as detailed as possible. Please ensure that the answer is detailed and accurate based on the provided context. Review the chat history carefully to provide all necessary details and avoid incorrect information. Treat synonyms or similar words as equivalent within the context. For example, if a question refers to "modules" or "units" instead of "chapters" or "doc" instead of "document" consider them the same. If the question is not related to the provided context, simply respond with "out of context."
+    # Create Document objects from the text chunks
 
-
-    Context:\n{context}?\n
-    Question:\n{question}\n
-    Answer:
-    """
-    model = ChatGoogleGenerativeAI(model="gemini-pro")
-    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
-    chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
-    return chain
-
-def user_input(user_question, usersession):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    new_db = FAISS.load_local(usersession, embeddings, allow_dangerous_deserialization=True)
-    docs = new_db.similarity_search(user_question)
-    chain = get_conversational_chain()
-
-    response = chain(
-        {"input_documents": docs, "question": user_question}, StrOutputParser()
+    #llm = OllamaFunctions(model="phi3")
+    llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0125")
+    llm_transformer = LLMGraphTransformer(llm=llm)
+    graph_documents = llm_transformer.convert_to_graph_documents(text_chunks)
+    
+    graph.add_graph_documents (
+      graph_documents
     )
+    print(f"Nodes:{graph_documents[0].nodes}")
+    print(f"Relationships:{graph_documents[0].relationships}")
+
+
+    graph.query(
+    "CREATE FULLTEXT INDEX entity IF NOT EXISTS FOR (e:__Entity__) ON EACH [e.id]")
+
+# Extract entities from text
+    class Entities(BaseModel):
+        """Identifying information about entities."""
+
+        names: List[str] = Field(
+        ...,
+            description="All the person, organization, or business entities that "
+        "appear in the text",
+    )
+
+
+# Added get_conversational_chain function
+def get_conversational_chain():
+    embeddings = OpenAIEmbeddings()
+    #OllamaEmbeddings(model="mxbai-embed-large")
+    vector_index = Neo4jVector.from_existing_graph(
+        embeddings,
+        url="neo4j+s://0479a26a.databases.neo4j.io",
+        username='neo4j',
+        password='OZcxm3oDjT8I0WRxC2RgkqAudZOnZ174ciaDk2gQuSM',
+        search_type="hybrid",
+        node_label="Document",
+        text_node_properties=["text"],
+        embedding_node_property="embedding"
+    )
+
+    try:
+        llm=ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0125")
+    except Exception as e:
+        print(f"Error loading Ollama model: {e}")
+        return None
+
+    vector_qa = RetrievalQA.from_chain_type(
+        llm,
+        chain_type="stuff",
+        retriever=vector_index.as_retriever()
+    )
+    return vector_qa
+
+# Added user_input function
+def user_input(user_question):
+    vector_qa = get_conversational_chain()
+    if vector_qa is None:
+        return {"output_text": "Error: Could not load the model."}
+    response = vector_qa.run(user_question)
     return response
 
 @app.route('/upload', methods=['POST', 'OPTIONS'])
@@ -155,7 +274,7 @@ def index():  # Retrieve the stored URL or set it to empty string
     url_input = request.form.get("urls")
     session_name = request.form.get("sessionName")
     logging.debug(f'here : {url_input}')
-    raw_text = ""
+    raw_text = []
     session["input_language"] = int(request.form.get("inputLanguage"))
 
     session["output_language"] = int(request.form.get("outputLanguage"))
@@ -167,21 +286,20 @@ def index():  # Retrieve the stored URL or set it to empty string
     if files and files[0].filename != '':
         valid_files = all(f.filename.endswith(('.pdf', '.doc', '.docx', '.txt')) for f in files)
         if valid_files:
-            raw_text += get_text_from_files(files)
+            raw_text.append(get_text_from_files(files))
             message = "Files successfully uploaded."
         else:
             message = "Please upload files in PDF, DOC, DOCX, or TXT format."
 
     # Process URL
     if url_input:
-        url_text = get_text_from_urls(url_input)
-        raw_text += " " + url_text
+        url_text = get_text_from_url(url_input)
+        raw_text.append(url_text)
 
 
 
     if raw_text:
-        text_chunks = get_text_chunks(raw_text)
-        get_vector_store(text_chunks, session['session_id'])
+        get_vector_store(raw_text, session['session_id'])
 
     #chat_history = session.get('chat_history', [])
     #return jsonify({"chat_history": chat_history})
@@ -192,6 +310,11 @@ def index():  # Retrieve the stored URL or set it to empty string
 @app.route('/healthcheck', methods=['GET'])
 def healthcheck():
     return {"message": "app is up and running"}
+
+@app.route('/getgraph', methods=['GET'])
+def showg():
+    get_graph(docs)
+    return render_template('graph.html')
 
 @app.route('/ask', methods=['POST'])
 def ask():
