@@ -179,6 +179,8 @@ def get_graph(graph_documents):
         # Generate HTML file
         net.write_html("graph.html")
 
+#get_graph()
+
 # Added get_vector_store function
 def get_vector_store(text_chunks, usersession):
     # Preprocess the documents to convert lists to tuples

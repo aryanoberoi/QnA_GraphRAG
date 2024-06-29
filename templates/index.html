@@ -195,6 +195,7 @@
 								<div class="input-group-append">
                                     <button type="submit" id="send" class="input-group-text send_btn"><i class="fas fa-location-arrow"></i></button>
                                     <button type="button" id="record" class="input-group-text record_btn"><i class="fas fa-microphone"></i></button>
+                                    <button id="languageButton">Switch to Hindi</button>
 								</div>
 							</form>
 						</div>
@@ -289,7 +290,22 @@
         recognition = new webkitSpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = false;
+
+        const languageButton = document.getElementById('languageButton');
+let isHindi = false;
+
+languageButton.addEventListener('click', function() {
+    if (isHindi) {
         recognition.lang = 'en-US';
+        languageButton.textContent = 'Switch to Hindi';
+        isHindi = false;
+    } else {
+        recognition.lang = 'hi-IN';
+        languageButton.textContent = 'Switch to English';
+        isHindi = true;
+    }
+});
+
 
         recognition.onstart = function() {
             isRecording = true;
